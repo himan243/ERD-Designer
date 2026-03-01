@@ -364,7 +364,7 @@ function AppContent() {
   const onSave = useCallback(async () => {
     if (!reactFlowInstance) return;
     const flow = reactFlowInstance.toObject();
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const API_URL = import.meta.env.VITE_API_URL || 'https://erd-designer-api.onrender.com';
     try {
       await fetch(`${API_URL}/api/diagrams`, {
         method: 'POST',
