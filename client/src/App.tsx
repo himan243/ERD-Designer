@@ -388,6 +388,56 @@ function AppContent() {
   const onConnect: OnConnect = useCallback((params) => {
     const sourceNode = nodesRef.current.find(n => n.id === params.source);
     const targetNode = nodesRef.current.find(n => n.id === params.target);
+    
+    if (sourceNode?.type === 'entity' && targetNode?.type === 'entity') {
+      saveToHistory();
+      
+      const relId = `node_${Date.now()}`;
+      const dx = targetNode.position.x - sourceNode.position.x;
+      const dy = targetNode.position.y - sourceNode.position.y;
+
+      const midpoint = {
+        x: sourceNode.position.x + dx / 2,
+        y: sourceNode.position.y + dy / 2,
+      };
+
+      // Determine best handles based on direction
+      let sourceH, relTargetH, relSourceH, targetH;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 0) { // Target is Right
+          sourceH = 'r'; relTargetH = 'l-t'; relSourceH = 'r'; targetH = 'l-t';
+        } else { // Target is Left
+          sourceH = 'l'; relTargetH = 'r-t'; relSourceH = 'l'; targetH = 'r-t';
+        }
+      } else {
+        if (dy > 0) { // Target is Bottom
+          sourceH = 'b'; relTargetH = 't-t'; relSourceH = 'b'; targetH = 't-t';
+        } else { // Target is Top
+          sourceH = 't'; relTargetH = 'b-t'; relSourceH = 't'; targetH = 'b-t';
+        }
+      }
+
+      const newRelNode: ERNode = {
+        id: relId,
+        type: 'relationship',
+        position: midpoint,
+        data: { 
+          label: 'Relationship',
+          cardinality: {},
+          isNew: true,
+          onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange
+        },
+      };
+
+      setNodes(nds => nds.concat(newRelNode));
+      setEdges(eds => [
+        ...eds,
+        { id: `e_${Date.now()}_1`, source: params.source!, target: relId, sourceHandle: sourceH, targetHandle: relTargetH, type: 'erEdge' },
+        { id: `e_${Date.now()}_2`, source: relId, target: params.target!, sourceHandle: relSourceH, targetHandle: targetH, type: 'erEdge' }
+      ]);
+      return;
+    }
+
     if (sourceNode?.type === targetNode?.type) {
       const typeLabel = sourceNode?.type === 'entity' ? 'Entities' : 'Relationships';
       alert(`${typeLabel} cannot be connected directly.`);
@@ -395,7 +445,7 @@ function AppContent() {
     }
     saveToHistory();
     setEdges((eds) => addEdge({ ...params, type: 'erEdge' }, eds));
-  }, [setEdges, saveToHistory]);
+  }, [setEdges, setNodes, saveToHistory, onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     if (changes.some(c => c.type === 'position' || c.type === 'remove')) { saveToHistory(); }
