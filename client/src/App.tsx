@@ -108,10 +108,11 @@ const EntityNode = ({ data, selected, id }: NodeProps<ERNode>) => {
               />
             </div>
             <div className="attr-actions">
-               <button className={`attr-action-btn ${attr.isPrimary ? 'active' : ''}`} onClick={() => data.onTogglePrimary?.(id, attr.id)} title="Toggle PK">
+               <button className={`attr-action-btn ${attr.isPrimary ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); data.onTogglePrimary?.(id, attr.id); }} title="Toggle PK">
                 <Key size={12} />
               </button>
-              <button className="attr-action-btn delete" onClick={() => {
+              <button className="attr-action-btn delete" onClick={(e) => {
+                e.stopPropagation();
                 if (window.confirm('Delete this attribute?')) {
                   data.onDeleteAttribute?.(id, attr.id);
                 }
@@ -122,7 +123,7 @@ const EntityNode = ({ data, selected, id }: NodeProps<ERNode>) => {
           </div>
         ))}
       </div>
-      <button className="add-attr-btn" onClick={() => data.onAddAttribute?.(id)}>
+      <button className="add-attr-btn" onClick={(e) => { e.stopPropagation(); data.onAddAttribute?.(id); }}>
         <Plus size={14} />
       </button>
 
@@ -146,7 +147,7 @@ const CardinalityPicker = ({ value, onChange, pos }: { value: string; onChange: 
   };
 
   return (
-    <div className="cardinality-picker" style={styles[pos]} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+    <div className="cardinality-picker" style={styles[pos]} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onClick={(e) => e.stopPropagation()}>
       {['1', 'N', 'M'].map(v => {
         if (!hovered && value !== v) return null;
         return (
@@ -194,7 +195,7 @@ function AppContent() {
   const [edges, setEdges] = useEdgesState<Edge>([]);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
   const [isDark, setIsDark] = useState(true);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
 
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
@@ -237,18 +238,9 @@ function AppContent() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        e.preventDefault();
-        undo();
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
-        e.preventDefault();
-        redo();
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
-        e.preventDefault();
-        setIsSidebarOpen(prev => !prev);
-      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); setIsSidebarOpen(prev => !prev); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -326,26 +318,16 @@ function AppContent() {
   }, [setEdges, saveToHistory]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
-    if (changes.some(c => c.type === 'position' || c.type === 'remove')) {
-      saveToHistory();
-    }
+    if (changes.some(c => c.type === 'position' || c.type === 'remove')) { saveToHistory(); }
     setNodes((nds) => applyNodeChanges(changes, nds) as ERNode[]);
   }, [setNodes, saveToHistory]);
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
-    if (changes.some(c => c.type === 'remove')) {
-      saveToHistory();
-    }
+    if (changes.some(c => c.type === 'remove')) { saveToHistory(); }
     setEdges((eds) => applyEdgeChanges(changes, eds));
   }, [setEdges, saveToHistory]);
 
-  const onDrop = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    if (!reactFlowInstance) return;
-    const type = event.dataTransfer.getData('application/reactflow');
-    if (!type) return;
-    const position = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    
+  const createNewNode = useCallback((type: string, position: { x: number, y: number }) => {
     saveToHistory();
     const newNode: ERNode = {
       id: `node_${Date.now()}`,
@@ -359,7 +341,26 @@ function AppContent() {
       },
     };
     setNodes((nds) => nds.concat(newNode));
-  }, [reactFlowInstance, onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange, setNodes, saveToHistory]);
+  }, [onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange, setNodes, saveToHistory]);
+
+  const onDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    if (!reactFlowInstance) return;
+    const type = event.dataTransfer.getData('application/reactflow');
+    if (!type) return;
+    const position = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    createNewNode(type, position);
+  }, [reactFlowInstance, createNewNode]);
+
+  const handleSidebarItemClick = (type: string) => {
+    if (!reactFlowInstance) return;
+    const position = reactFlowInstance.screenToFlowPosition({ 
+      x: window.innerWidth / 2, 
+      y: window.innerHeight / 2 
+    });
+    createNewNode(type, position);
+    if (window.innerWidth <= 768) setIsSidebarOpen(false);
+  };
 
   const onClear = () => {
     if (window.confirm('Are you sure you want to clear the entire diagram?')) {
@@ -392,10 +393,20 @@ function AppContent() {
         </div>
         
         <div className="sidebar-content">
-          <div className="dndnode entity" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'entity'); }} draggable>
+          <div 
+            className="dndnode entity" 
+            onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'entity'); }} 
+            onClick={() => handleSidebarItemClick('entity')}
+            draggable
+          >
             <Square size={18} /> Entity
           </div>
-          <div className="dndnode relationship" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'relationship'); }} draggable>
+          <div 
+            className="dndnode relationship" 
+            onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'relationship'); }} 
+            onClick={() => handleSidebarItemClick('relationship')}
+            draggable
+          >
             <Diamond size={18} /> Relationship
           </div>
         </div>
