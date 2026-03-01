@@ -361,20 +361,6 @@ function AppContent() {
     setNodes((nds) => nds.concat(newNode));
   }, [reactFlowInstance, onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange, setNodes, saveToHistory]);
 
-  const onSave = useCallback(async () => {
-    if (!reactFlowInstance) return;
-    const flow = reactFlowInstance.toObject();
-    const API_URL = import.meta.env.VITE_API_URL || 'https://erd-designer-api.onrender.com';
-    try {
-      await fetch(`${API_URL}/api/diagrams`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(flow),
-      });
-      alert('Diagram saved!');
-    } catch (e) { alert('Save failed'); }
-  }, [reactFlowInstance]);
-
   const onClear = () => {
     if (window.confirm('Are you sure you want to clear the entire diagram?')) {
       saveToHistory();
