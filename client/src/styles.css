@@ -1,0 +1,334 @@
+/* --- Global Variables & Themes --- */
+:root {
+  --primary-color: #2563eb;
+  --bg-color: #f8fafc;
+  --sidebar-bg: #ffffff;
+  --node-bg: #ffffff;
+  --border-color: #e2e8f0;
+  --text-color: #1e293b;
+  --entity-color: #ef4444;
+  --relationship-color: #3b82f6;
+  --panel-bg: rgba(255, 255, 255, 0.9);
+  --sidebar-width: 260px;
+}
+
+.dark {
+  --bg-color: #0f172a;
+  --sidebar-bg: #1e293b;
+  --node-bg: #1e293b;
+  --border-color: #334155;
+  --text-color: #f8fafc;
+  --panel-bg: rgba(30, 41, 59, 0.9);
+}
+
+/* Fix React Flow Controls in Dark Mode */
+.dark .react-flow__controls button {
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+  fill: #f8fafc;
+}
+.dark .react-flow__controls button:hover {
+  background: #334155;
+}
+.dark .react-flow__controls button svg {
+  fill: #f8fafc;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  color: var(--text-color);
+  background-color: var(--bg-color);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.dnd-container {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+.reactflow-wrapper {
+  flex-grow: 1;
+  background-color: var(--bg-color);
+  height: 100%;
+}
+
+/* --- Sidebar --- */
+aside {
+  width: var(--sidebar-width);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  z-index: 100;
+  transition: transform 0.3s ease, width 0.3s ease;
+  height: 100%;
+  overflow-y: auto;
+}
+
+aside.collapsed {
+  transform: translateX(-100%);
+  width: 0;
+  padding: 0;
+  border: none;
+}
+
+.sidebar-header {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 2rem;
+  color: var(--primary-color);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sidebar-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dndnode {
+  padding: 0.75rem;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--node-bg);
+  cursor: grab;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-color);
+}
+
+.sidebar-toggle-btn {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 1000;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* --- Entity Node --- */
+.entity-table {
+  background: var(--node-bg);
+  border: 2px solid var(--entity-color);
+  min-width: 160px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.entity-header {
+  background: var(--entity-color);
+  color: white;
+  padding: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.attribute-row {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  min-height: 32px;
+}
+
+.attribute-row:last-child {
+  border-bottom: none;
+}
+
+.attr-label-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.attribute-row.primary-key .attr-label-container {
+  font-weight: 700;
+  text-decoration: underline;
+  color: var(--primary-color);
+}
+
+.attr-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0; /* Hidden by default */
+  transition: opacity 0.2s;
+  background: var(--node-bg);
+  padding-left: 4px;
+}
+
+.attribute-row:hover .attr-actions {
+  opacity: 1; /* Show on hover */
+}
+
+.attr-action-btn {
+  padding: 2px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--secondary-color);
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+}
+
+.attr-action-btn:hover {
+  background: var(--bg-color);
+  color: var(--primary-color);
+}
+
+.attr-action-btn.delete:hover {
+  color: var(--entity-color);
+}
+
+.attr-action-btn.active {
+  color: var(--primary-color);
+}
+
+.add-attr-btn {
+  width: 100%;
+  padding: 6px;
+  background: transparent;
+  border: none;
+  border-top: 1px dashed var(--border-color);
+  color: var(--secondary-color);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --- Relationship Diamond --- */
+.relationship-container {
+  width: 90px;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.diamond {
+  width: 64px; /* Fixed size square */
+  height: 64px;
+  border: 2px solid var(--relationship-color);
+  background: var(--node-bg);
+  transform: rotate(45deg);
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.relationship-label {
+  position: relative;
+  z-index: 1;
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--text-color);
+  text-align: center;
+  width: 50px; /* Constrain label within diamond */
+  word-wrap: break-word;
+  line-height: 1.1;
+}
+
+/* Cardinality Controls on Node */
+.cardinality-picker {
+  position: absolute;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 2px 4px;
+  display: flex;
+  gap: 2px;
+  z-index: 50;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.cardinality-picker button {
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  border: none;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.cardinality-picker button:hover {
+  background: var(--primary-color);
+  color: white;
+}
+
+.cardinality-picker button.active {
+  background: var(--primary-color);
+  color: white;
+}
+
+/* React Flow Handle Overrides */
+.react-flow__handle {
+  width: 10px !important;
+  height: 10px !important;
+  background: var(--primary-color) !important;
+  border: 1.5px solid white !important;
+  transition: transform 0.2s, background-color 0.2s;
+}
+
+.react-flow__handle:hover {
+  transform: scale(1.4);
+  background: #1d4ed8 !important;
+}
+
+.react-flow__handle-left { left: -5px !important; }
+.react-flow__handle-right { right: -5px !important; }
+.react-flow__handle-top { top: -5px !important; }
+.react-flow__handle-bottom { bottom: -5px !important; }
+
+/* --- Misc --- */
+.theme-toggle {
+  margin-top: 1rem;
+  padding: 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--node-bg);
+  color: var(--text-color);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  margin-bottom: 2rem; /* Move up slightly by reducing margin-top or adding bottom space */
+}
+
+.react-flow__node {
+  transition: none !important;
+}
+
+input.inline-edit {
+  background: transparent;
+  border: 1px dashed var(--primary-color);
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  width: 100%;
+  outline: none;
+}
