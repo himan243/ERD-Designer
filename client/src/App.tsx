@@ -16,6 +16,7 @@ import {
   applyNodeChanges,
   applyEdgeChanges,
   useReactFlow,
+  useHandleConnections,
 } from '@xyflow/react';
 import type {
   Edge,
@@ -60,11 +61,8 @@ interface ERNodeData extends Record<string, unknown> {
   onUpdateAttribute?: (nodeId: string, attrId: string, name: string) => void;
   onDeleteAttribute?: (nodeId: string, attrId: string) => void;
   onTogglePrimary?: (nodeId: string, attrId: string) => void;
-  onCardinalityChange?: (nodeId: string, pos: 'left' | 'right', val: string) => void;
-  cardinality?: {
-    left?: string;
-    right?: string;
-  };
+  onCardinalityChange?: (nodeId: string, handleId: string, val: string) => void;
+  cardinality?: Record<string, string>;
 }
 
 type ERNode = Node<ERNodeData>;
@@ -122,6 +120,54 @@ const InlineEdit = ({ value, onSave, className = "", startEditing = false }: { v
   );
 };
 
+const CardinalityPicker = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div 
+      className="cardinality-picker attached" 
+      onMouseEnter={() => setHovered(true)} 
+      onMouseLeave={() => setHovered(false)} 
+      onClick={(e) => e.stopPropagation()}
+    >
+      {['1', 'N', 'M'].map(v => {
+        if (!hovered && value !== v) return null;
+        return (
+          <button key={v} className={value === v ? 'active' : ''} onClick={(e) => { e.stopPropagation(); onChange(v); }}>
+            {v}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+const CornerPicker = ({ nodeId, handleIds, pos, data }: { nodeId: string; handleIds: string[]; pos: Position; data: ERNodeData }) => {
+  const connections1 = useHandleConnections({ type: 'source', id: handleIds[0] });
+  const connections2 = useHandleConnections({ type: 'target', id: handleIds[1] });
+  const isConnected = connections1.length > 0 || connections2.length > 0;
+
+  if (!isConnected) return null;
+
+  const styles: Record<string, React.CSSProperties> = {
+    [Position.Top]:    { position: 'absolute', top: -35, left: '50%', transform: 'translateX(-50%)', display: 'flex', justifyContent: 'center', zIndex: 100 },
+    [Position.Bottom]: { position: 'absolute', bottom: -35, left: '50%', transform: 'translateX(-50%)', display: 'flex', justifyContent: 'center', zIndex: 100 },
+    [Position.Left]:   { position: 'absolute', left: -35, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', zIndex: 100 },
+    [Position.Right]:  { position: 'absolute', right: -35, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', zIndex: 100 },
+  };
+
+  const activeHandle = connections1.length > 0 ? handleIds[0] : handleIds[1];
+
+  return (
+    <div style={styles[pos]}>
+      <CardinalityPicker 
+        value={data.cardinality?.[activeHandle] || '1'} 
+        onChange={(v) => data.onCardinalityChange?.(nodeId, activeHandle, v)} 
+      />
+    </div>
+  );
+};
+
 const EntityNode = ({ data, selected, id }: NodeProps<ERNode>) => {
   return (
     <div className={`entity-table ${selected ? 'selected' : ''}`}>
@@ -172,27 +218,6 @@ const EntityNode = ({ data, selected, id }: NodeProps<ERNode>) => {
   );
 };
 
-const CardinalityPicker = ({ value, onChange, pos }: { value: string; onChange: (v: string) => void; pos: 'left' | 'right' }) => {
-  const [hovered, setHovered] = useState(false);
-  const styles: Record<string, any> = {
-    left: { left: -85, top: '50%', transform: 'translateY(-50%)' },
-    right: { right: -85, top: '50%', transform: 'translateY(-50%)' },
-  };
-
-  return (
-    <div className="cardinality-picker" style={styles[pos]} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onClick={(e) => e.stopPropagation()}>
-      {['1', 'N', 'M'].map(v => {
-        if (!hovered && value !== v) return null;
-        return (
-          <button key={v} className={value === v ? 'active' : ''} onClick={(e) => { e.stopPropagation(); onChange(v); }}>
-            {v}
-          </button>
-        );
-      })}
-    </div>
-  );
-};
-
 const RelationshipNode = ({ data, id }: NodeProps<ERNode>) => {
   return (
     <div className="relationship-container">
@@ -200,8 +225,6 @@ const RelationshipNode = ({ data, id }: NodeProps<ERNode>) => {
       <div className="relationship-label">
         <InlineEdit value={data.label} onSave={(v) => data.onLabelChange(id, v)} startEditing={data.isNew} />
       </div>
-      <CardinalityPicker pos="left" value={data.cardinality?.left || '1'} onChange={(v) => data.onCardinalityChange?.(id, 'left', v)} />
-      <CardinalityPicker pos="right" value={data.cardinality?.right || '1'} onChange={(v) => data.onCardinalityChange?.(id, 'right', v)} />
 
       <Handle type="source" position={Position.Top} id="t" />
       <Handle type="source" position={Position.Bottom} id="b" />
@@ -211,6 +234,11 @@ const RelationshipNode = ({ data, id }: NodeProps<ERNode>) => {
       <Handle type="target" position={Position.Bottom} id="b-t" />
       <Handle type="target" position={Position.Left} id="l-t" />
       <Handle type="target" position={Position.Right} id="r-t" />
+
+      <CornerPicker nodeId={id} handleIds={['t', 't-t']} pos={Position.Top} data={data} />
+      <CornerPicker nodeId={id} handleIds={['b', 'b-t']} pos={Position.Bottom} data={data} />
+      <CornerPicker nodeId={id} handleIds={['l', 'l-t']} pos={Position.Left} data={data} />
+      <CornerPicker nodeId={id} handleIds={['r', 'r-t']} pos={Position.Right} data={data} />
     </div>
   );
 };
@@ -347,11 +375,11 @@ function AppContent() {
     }));
   }, [setNodes, saveToHistory]);
 
-  const onCardinalityChange = useCallback((nodeId: string, pos: 'left' | 'right', val: string) => {
+  const onCardinalityChange = useCallback((nodeId: string, handleId: string, val: string) => {
     saveToHistory();
     setNodes(nds => nds.map(n => {
       if (n.id === nodeId) {
-        return { ...n, data: { ...n.data, cardinality: { ...n.data.cardinality, [pos]: val } } };
+        return { ...n, data: { ...n.data, cardinality: { ...(n.data.cardinality || {}), [handleId]: val } } };
       }
       return n;
     }));
@@ -388,7 +416,7 @@ function AppContent() {
       data: { 
         label: type.charAt(0).toUpperCase() + type.slice(1),
         attributes: type === 'entity' ? [{ id: '1', name: 'id', isPrimary: true }] : [],
-        cardinality: type === 'relationship' ? { left: '1', right: '1' } : undefined,
+        cardinality: {},
         isNew: true,
         onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange
       },
