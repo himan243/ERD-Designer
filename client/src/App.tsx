@@ -15,6 +15,7 @@ import {
   ReactFlowProvider,
   applyNodeChanges,
   applyEdgeChanges,
+  useReactFlow,
 } from '@xyflow/react';
 import type {
   Edge,
@@ -36,7 +37,9 @@ import {
   Key,
   X,
   Menu,
-  ChevronLeft
+  ChevronLeft,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import './styles.css';
@@ -191,6 +194,7 @@ const nodeTypes = { entity: EntityNode, relationship: RelationshipNode };
 const edgeTypes = { erEdge: EREdge };
 
 function AppContent() {
+  const { deleteElements } = useReactFlow();
   const [nodes, setNodes] = useNodesState<ERNode>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
@@ -228,6 +232,18 @@ function AppContent() {
     setEdges(next.edges);
   }, [setNodes, setEdges]);
 
+  const deleteSelected = useCallback(() => {
+    const selectedNodes = nodesRef.current.filter(n => n.selected);
+    const selectedEdges = edgesRef.current.filter(e => e.selected);
+    
+    if (selectedNodes.length > 0 || selectedEdges.length > 0) {
+      if (window.confirm(`Delete ${selectedNodes.length + selectedEdges.length} selected item(s)?`)) {
+        saveToHistory();
+        deleteElements({ nodes: selectedNodes, edges: selectedEdges });
+      }
+    }
+  }, [deleteElements, saveToHistory]);
+
   useEffect(() => {
     document.body.classList.toggle('dark', isDark);
   }, [isDark]);
@@ -241,10 +257,16 @@ function AppContent() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); setIsSidebarOpen(prev => !prev); }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        // Only trigger if not typing in an input
+        if (document.activeElement?.tagName !== 'INPUT') {
+          deleteSelected();
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo]);
+  }, [undo, redo, deleteSelected]);
 
   const onLabelChange = useCallback((id: string, label: string) => {
     saveToHistory();
@@ -380,6 +402,8 @@ function AppContent() {
     })));
   }, [onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange, setNodes]);
 
+  const hasSelected = nodes.some(n => n.selected) || edges.some(e => e.selected);
+
   return (
     <div className="dnd-container">
       <button className="sidebar-toggle-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
@@ -393,20 +417,10 @@ function AppContent() {
         </div>
         
         <div className="sidebar-content">
-          <div 
-            className="dndnode entity" 
-            onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'entity'); }} 
-            onClick={() => handleSidebarItemClick('entity')}
-            draggable
-          >
+          <div className="dndnode entity" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'entity'); }} onClick={() => handleSidebarItemClick('entity')} draggable>
             <Square size={18} /> Entity
           </div>
-          <div 
-            className="dndnode relationship" 
-            onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'relationship'); }} 
-            onClick={() => handleSidebarItemClick('relationship')}
-            draggable
-          >
+          <div className="dndnode relationship" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'relationship'); }} onClick={() => handleSidebarItemClick('relationship')} draggable>
             <Diamond size={18} /> Relationship
           </div>
         </div>
@@ -439,10 +453,29 @@ function AppContent() {
           attributionPosition="bottom-right"
         >
           <Background color={isDark ? '#334155' : '#cbd5e1'} gap={20} />
+          
+          <Panel position="top-center">
+            <div className="action-toolbar">
+              <button className="toolbar-btn" onClick={undo} title="Undo (Ctrl+Z)"><Undo2 size={18} /></button>
+              <button className="toolbar-btn" onClick={redo} title="Redo (Ctrl+Y)"><Redo2 size={18} /></button>
+              <div style={{ width: '1px', background: 'var(--border-color)', margin: '0 4px' }} />
+              <button 
+                className="toolbar-btn delete" 
+                onClick={deleteSelected} 
+                disabled={!hasSelected}
+                title="Delete Selected"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
+          </Panel>
+
           <Controls showInteractive={true} />
-          <Panel position="bottom-right" style={{ fontSize: '10px', opacity: 0.5, color: isDark ? '#fff' : '#000' }}>
+          
+          <Panel position="bottom-right" style={{ fontSize: '10px', opacity: 0.6, color: 'var(--text-color)', marginBottom: '10px', marginRight: '10px' }}>
             Himan Kalita - 2026
           </Panel>
+
           <Panel position="top-right" className="panel">
             <button onClick={onClear} title="Clear Canvas" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'inherit' }}>
               <Trash2 size={20} />
