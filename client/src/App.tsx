@@ -48,11 +48,13 @@ interface Attribute {
   id: string;
   name: string;
   isPrimary?: boolean;
+  isNew?: boolean;
 }
 
 interface ERNodeData extends Record<string, unknown> {
   label: string;
   attributes?: Attribute[];
+  isNew?: boolean;
   onLabelChange: (id: string, label: string) => void;
   onAddAttribute?: (id: string) => void;
   onUpdateAttribute?: (nodeId: string, attrId: string, name: string) => void;
@@ -67,9 +69,11 @@ interface ERNodeData extends Record<string, unknown> {
 
 type ERNode = Node<ERNodeData>;
 
-const InlineEdit = ({ value, onSave, className = "" }: { value: string; onSave: (v: string) => void; className?: string }) => {
-  const [editing, setEditing] = useState(false);
+const InlineEdit = ({ value, onSave, className = "", startEditing = false }: { value: string; onSave: (v: string) => void; className?: string; startEditing?: boolean }) => {
+  const [editing, setEditing] = useState(startEditing);
   const [val, setVal] = useState(value);
+  const lastClickTime = useRef(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -78,19 +82,44 @@ const InlineEdit = ({ value, onSave, className = "" }: { value: string; onSave: 
     }
   };
 
+  const handleClick = () => {
+    const now = Date.now();
+    if (now - lastClickTime.current < 300) {
+      setEditing(true);
+    }
+    lastClickTime.current = now;
+  };
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      // Robust selection for mobile Safari
+      inputRef.current.setSelectionRange(0, inputRef.current.value.length);
+    }
+  }, [editing]);
+
   if (editing) {
     return (
       <input 
+        ref={inputRef}
         className="inline-edit"
         value={val} 
         onChange={e => setVal(e.target.value)}
         onBlur={() => { setEditing(false); onSave(val); }}
         onKeyDown={handleKeyDown}
-        autoFocus
       />
     );
   }
-  return <div className={className} onDoubleClick={() => setEditing(true)}>{value}</div>;
+  return (
+    <div 
+      className={className} 
+      onClick={handleClick}
+      onDoubleClick={() => setEditing(true)}
+      style={{ cursor: 'pointer', userSelect: 'none', touchAction: 'manipulation' }}
+    >
+      {value}
+    </div>
+  );
 };
 
 const EntityNode = ({ data, selected, id }: NodeProps<ERNode>) => {
@@ -98,7 +127,7 @@ const EntityNode = ({ data, selected, id }: NodeProps<ERNode>) => {
     <div className={`entity-table ${selected ? 'selected' : ''}`}>
       <NodeResizer minWidth={160} isVisible={selected} handleStyle={{ width: 8, height: 8 }} />
       <div className="entity-header">
-        <InlineEdit value={data.label} onSave={(v) => data.onLabelChange(id, v)} />
+        <InlineEdit value={data.label} onSave={(v) => data.onLabelChange(id, v)} startEditing={data.isNew} />
       </div>
       <div className="entity-attributes">
         {data.attributes?.map((attr) => (
@@ -108,6 +137,7 @@ const EntityNode = ({ data, selected, id }: NodeProps<ERNode>) => {
               <InlineEdit 
                 value={attr.name} 
                 onSave={(v) => data.onUpdateAttribute?.(id, attr.id, v)} 
+                startEditing={attr.isNew}
               />
             </div>
             <div className="attr-actions">
@@ -168,7 +198,7 @@ const RelationshipNode = ({ data, id }: NodeProps<ERNode>) => {
     <div className="relationship-container">
       <div className="diamond"></div>
       <div className="relationship-label">
-        <InlineEdit value={data.label} onSave={(v) => data.onLabelChange(id, v)} />
+        <InlineEdit value={data.label} onSave={(v) => data.onLabelChange(id, v)} startEditing={data.isNew} />
       </div>
       <CardinalityPicker pos="left" value={data.cardinality?.left || '1'} onChange={(v) => data.onCardinalityChange?.(id, 'left', v)} />
       <CardinalityPicker pos="right" value={data.cardinality?.right || '1'} onChange={(v) => data.onCardinalityChange?.(id, 'right', v)} />
@@ -270,14 +300,14 @@ function AppContent() {
 
   const onLabelChange = useCallback((id: string, label: string) => {
     saveToHistory();
-    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, label } } : n));
+    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, label, isNew: false } } : n));
   }, [setNodes, saveToHistory]);
 
   const onAddAttribute = useCallback((nodeId: string) => {
     saveToHistory();
     setNodes(nds => nds.map(n => {
       if (n.id === nodeId) {
-        const attributes = [...(n.data.attributes || []), { id: Date.now().toString(), name: 'new_attr', isPrimary: false }];
+        const attributes = [...(n.data.attributes || []), { id: Date.now().toString(), name: 'new_attr', isPrimary: false, isNew: true }];
         return { ...n, data: { ...n.data, attributes } };
       }
       return n;
@@ -288,7 +318,7 @@ function AppContent() {
     saveToHistory();
     setNodes(nds => nds.map(n => {
       if (n.id === nodeId) {
-        const attributes = n.data.attributes?.map(a => a.id === attrId ? { ...a, name } : a);
+        const attributes = n.data.attributes?.map(a => a.id === attrId ? { ...a, name, isNew: false } : a);
         return { ...n, data: { ...n.data, attributes } };
       }
       return n;
@@ -359,6 +389,7 @@ function AppContent() {
         label: type.charAt(0).toUpperCase() + type.slice(1),
         attributes: type === 'entity' ? [{ id: '1', name: 'id', isPrimary: true }] : [],
         cardinality: type === 'relationship' ? { left: '1', right: '1' } : undefined,
+        isNew: true,
         onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange
       },
     };
