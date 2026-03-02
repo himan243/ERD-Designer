@@ -41,6 +41,7 @@ import {
   ChevronLeft,
   Undo2,
   Redo2,
+  Link,
 } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import './styles.css';
@@ -49,6 +50,7 @@ interface Attribute {
   id: string;
   name: string;
   isPrimary?: boolean;
+  isForeign?: boolean;
   isNew?: boolean;
 }
 
@@ -61,6 +63,7 @@ interface ERNodeData extends Record<string, unknown> {
   onUpdateAttribute?: (nodeId: string, attrId: string, name: string) => void;
   onDeleteAttribute?: (nodeId: string, attrId: string) => void;
   onTogglePrimary?: (nodeId: string, attrId: string) => void;
+  onToggleForeign?: (nodeId: string, attrId: string) => void;
   onCardinalityChange?: (nodeId: string, handleId: string, val: string) => void;
   cardinality?: Record<string, string>;
 }
@@ -91,7 +94,6 @@ const InlineEdit = ({ value, onSave, className = "", startEditing = false }: { v
   useEffect(() => {
     if (editing && inputRef.current) {
       inputRef.current.focus();
-      // Robust selection for mobile Safari
       inputRef.current.setSelectionRange(0, inputRef.current.value.length);
     }
   }, [editing]);
@@ -177,9 +179,12 @@ const EntityNode = ({ data, selected, id }: NodeProps<ERNode>) => {
       </div>
       <div className="entity-attributes">
         {data.attributes?.map((attr) => (
-          <div key={attr.id} className={`attribute-row ${attr.isPrimary ? 'primary-key' : ''}`}>
+          <div key={attr.id} className={`attribute-row ${attr.isPrimary ? 'primary-key' : ''} ${attr.isForeign ? 'foreign-key' : ''}`}>
             <div className="attr-label-container">
-              {attr.isPrimary ? <Key size={10} color="#2563eb" /> : <div style={{width: 10}} />}
+              <div style={{ display: 'flex', gap: '2px', width: '24px', flexShrink: 0 }}>
+                {attr.isPrimary && <Key size={10} color="#2563eb" />}
+                {attr.isForeign && <Link size={10} color="#10b981" />}
+              </div>
               <InlineEdit 
                 value={attr.name} 
                 onSave={(v) => data.onUpdateAttribute?.(id, attr.id, v)} 
@@ -187,8 +192,11 @@ const EntityNode = ({ data, selected, id }: NodeProps<ERNode>) => {
               />
             </div>
             <div className="attr-actions">
-               <button className={`attr-action-btn ${attr.isPrimary ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); data.onTogglePrimary?.(id, attr.id); }} title="Toggle PK">
+              <button className={`attr-action-btn ${attr.isPrimary ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); data.onTogglePrimary?.(id, attr.id); }} title="Toggle PK">
                 <Key size={12} />
+              </button>
+              <button className={`attr-action-btn ${attr.isForeign ? 'active-fk' : ''}`} onClick={(e) => { e.stopPropagation(); data.onToggleForeign?.(id, attr.id); }} title="Toggle FK">
+                <Link size={12} />
               </button>
               <button className="attr-action-btn delete" onClick={(e) => {
                 e.stopPropagation();
@@ -293,7 +301,6 @@ function AppContent() {
   const deleteSelected = useCallback(() => {
     const selectedNodes = nodesRef.current.filter(n => n.selected);
     const selectedEdges = edgesRef.current.filter(e => e.selected);
-    
     if (selectedNodes.length > 0 || selectedEdges.length > 0) {
       if (window.confirm(`Delete ${selectedNodes.length + selectedEdges.length} selected item(s)?`)) {
         saveToHistory();
@@ -319,7 +326,7 @@ function AppContent() {
     saveToHistory();
     setNodes(nds => nds.map(n => {
       if (n.id === nodeId) {
-        const attributes = [...(n.data.attributes || []), { id: Date.now().toString(), name: 'new_attr', isPrimary: false, isNew: true }];
+        const attributes = [...(n.data.attributes || []), { id: Date.now().toString(), name: 'new_attr', isPrimary: false, isForeign: false, isNew: true }];
         return { ...n, data: { ...n.data, attributes } };
       }
       return n;
@@ -359,6 +366,17 @@ function AppContent() {
     }));
   }, [setNodes, saveToHistory]);
 
+  const onToggleForeign = useCallback((nodeId: string, attrId: string) => {
+    saveToHistory();
+    setNodes(nds => nds.map(n => {
+      if (n.id === nodeId) {
+        const attributes = n.data.attributes?.map(a => a.id === attrId ? { ...a, isForeign: !a.isForeign } : a);
+        return { ...n, data: { ...n.data, attributes } };
+      }
+      return n;
+    }));
+  }, [setNodes, saveToHistory]);
+
   const onCardinalityChange = useCallback((nodeId: string, handleId: string, val: string) => {
     saveToHistory();
     setNodes(nds => nds.map(n => {
@@ -372,35 +390,20 @@ function AppContent() {
   const onConnect: OnConnect = useCallback((params) => {
     const sourceNode = nodesRef.current.find(n => n.id === params.source);
     const targetNode = nodesRef.current.find(n => n.id === params.target);
-    
     if (sourceNode?.type === 'entity' && targetNode?.type === 'entity') {
       saveToHistory();
-      
       const relId = `node_${Date.now()}`;
       const dx = targetNode.position.x - sourceNode.position.x;
       const dy = targetNode.position.y - sourceNode.position.y;
-
-      const midpoint = {
-        x: sourceNode.position.x + dx / 2,
-        y: sourceNode.position.y + dy / 2,
-      };
-
-      // Determine best handles based on direction
+      const midpoint = { x: sourceNode.position.x + dx / 2, y: sourceNode.position.y + dy / 2 };
       let sourceH, relTargetH, relSourceH, targetH;
       if (Math.abs(dx) > Math.abs(dy)) {
-        if (dx > 0) { // Target is Right
-          sourceH = 'r'; relTargetH = 'l-t'; relSourceH = 'r'; targetH = 'l-t';
-        } else { // Target is Left
-          sourceH = 'l'; relTargetH = 'r-t'; relSourceH = 'l'; targetH = 'r-t';
-        }
+        if (dx > 0) { sourceH = 'r'; relTargetH = 'l-t'; relSourceH = 'r'; targetH = 'l-t'; }
+        else { sourceH = 'l'; relTargetH = 'r-t'; relSourceH = 'l'; targetH = 'r-t'; }
       } else {
-        if (dy > 0) { // Target is Bottom
-          sourceH = 'b'; relTargetH = 't-t'; relSourceH = 'b'; targetH = 't-t';
-        } else { // Target is Top
-          sourceH = 't'; relTargetH = 'b-t'; relSourceH = 't'; targetH = 'b-t';
-        }
+        if (dy > 0) { sourceH = 'b'; relTargetH = 't-t'; relSourceH = 'b'; targetH = 't-t'; }
+        else { sourceH = 't'; relTargetH = 'b-t'; relSourceH = 't'; targetH = 'b-t'; }
       }
-
       const newRelNode: ERNode = {
         id: relId,
         type: 'relationship',
@@ -409,10 +412,9 @@ function AppContent() {
           label: 'Relationship',
           cardinality: {},
           isNew: true,
-          onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange
+          onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onCardinalityChange
         },
       };
-
       setNodes(nds => nds.concat(newRelNode));
       setEdges(eds => [
         ...eds,
@@ -421,15 +423,13 @@ function AppContent() {
       ]);
       return;
     }
-
     if (sourceNode?.type === targetNode?.type) {
-      const typeLabel = sourceNode?.type === 'entity' ? 'Entities' : 'Relationships';
-      alert(`${typeLabel} cannot be connected directly.`);
+      alert(`${sourceNode?.type === 'entity' ? 'Entities' : 'Relationships'} cannot be connected directly.`);
       return;
     }
     saveToHistory();
     setEdges((eds) => addEdge({ ...params, type: 'erEdge' }, eds));
-  }, [setEdges, setNodes, saveToHistory, onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange]);
+  }, [setEdges, setNodes, saveToHistory, onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onCardinalityChange]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     if (changes.some(c => c.type === 'position' || c.type === 'remove')) { saveToHistory(); }
@@ -449,14 +449,14 @@ function AppContent() {
       position,
       data: { 
         label: type.charAt(0).toUpperCase() + type.slice(1),
-        attributes: type === 'entity' ? [{ id: '1', name: 'id', isPrimary: true }] : [],
+        attributes: type === 'entity' ? [{ id: '1', name: 'id', isPrimary: true, isForeign: false }] : [],
         cardinality: {},
         isNew: true,
-        onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange
+        onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onCardinalityChange
       },
     };
     setNodes((nds) => nds.concat(newNode));
-  }, [onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange, setNodes, saveToHistory]);
+  }, [onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onCardinalityChange, setNodes, saveToHistory]);
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -469,27 +469,19 @@ function AppContent() {
 
   const handleSidebarItemClick = (type: string) => {
     if (!reactFlowInstance) return;
-    const position = reactFlowInstance.screenToFlowPosition({ 
-      x: window.innerWidth / 2, 
-      y: window.innerHeight / 2 
-    });
+    const position = reactFlowInstance.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
     createNewNode(type, position);
     if (window.innerWidth <= 768) setIsSidebarOpen(false);
   };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (document.activeElement?.tagName === 'INPUT' || (document.activeElement as HTMLElement)?.isContentEditable) {
-        return;
-      }
-
+      if (document.activeElement?.tagName === 'INPUT' || (document.activeElement as HTMLElement)?.isContentEditable) return;
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); setIsSidebarOpen(prev => !prev); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'e') { e.preventDefault(); handleSidebarItemClick('entity'); }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        deleteSelected();
-      }
+      if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -506,12 +498,9 @@ function AppContent() {
   useEffect(() => {
     setNodes(nds => nds.map(n => ({
       ...n,
-      data: { 
-        ...n.data, 
-        onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange 
-      }
+      data: { ...n.data, onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onCardinalityChange }
     })));
-  }, [onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onCardinalityChange, setNodes]);
+  }, [onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onCardinalityChange, setNodes]);
 
   const hasSelected = nodes.some(n => n.selected) || edges.some(e => e.selected);
 
@@ -520,78 +509,30 @@ function AppContent() {
       <button className="sidebar-toggle-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
         {isSidebarOpen ? <ChevronLeft size={20} /> : <Menu size={20} />}
       </button>
-
       <aside className={!isSidebarOpen ? 'collapsed' : ''}>
-        <div className="sidebar-header">
-          <Database size={24} />
-          <span>ERD Designer</span>
-        </div>
-        
+        <div className="sidebar-header"><Database size={24} /><span>ERD Designer</span></div>
         <div className="sidebar-content">
           <div className="dndnode entity" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'entity'); }} onClick={() => handleSidebarItemClick('entity')} draggable title="Add Entity (Ctrl+E)">
             <Square size={18} /> Entity
           </div>
-          <div className="dndnode relationship" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'relationship'); }} onClick={() => handleSidebarItemClick('relationship')} draggable>
-            <Diamond size={18} /> Relationship
-          </div>
+          <div className="dndnode relationship" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'relationship'); }} onClick={() => handleSidebarItemClick('relationship')} draggable><Diamond size={18} /> Relationship</div>
         </div>
-
-        <button className="theme-toggle" onClick={() => setIsDark(!isDark)}>
-          {isDark ? <Sun size={18} /> : <Moon size={18} />}
-          {isDark ? 'Light Mode' : 'Dark Mode'}
-        </button>
+        <button className="theme-toggle" onClick={() => setIsDark(!isDark)}>{isDark ? <Sun size={18} /> : <Moon size={18} />}{isDark ? 'Light Mode' : 'Dark Mode'}</button>
       </aside>
-
       <div className="reactflow-wrapper">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onInit={setReactFlowInstance}
-          onDrop={onDrop}
-          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          fitView
-          panOnScroll={false}
-          panOnDrag={true}
-          selectionOnDrag={false}
-          zoomOnPinch={true}
-          zoomOnScroll={true}
-          connectionRadius={50}
-          attributionPosition="bottom-right"
-        >
+        <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onInit={setReactFlowInstance} onDrop={onDrop} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView panOnScroll={false} panOnDrag={true} selectionOnDrag={false} zoomOnPinch={true} zoomOnScroll={true} connectionRadius={50} attributionPosition="bottom-right">
           <Background color={isDark ? '#334155' : '#cbd5e1'} gap={20} />
-          
           <Panel position="top-center">
             <div className="action-toolbar">
               <button className="toolbar-btn" onClick={undo} title="Undo (Ctrl+Z)"><Undo2 size={18} /></button>
               <button className="toolbar-btn" onClick={redo} title="Redo (Ctrl+Y)"><Redo2 size={18} /></button>
               <div style={{ width: '1px', background: 'var(--border-color)', margin: '0 4px' }} />
-              <button 
-                className="toolbar-btn delete" 
-                onClick={deleteSelected} 
-                disabled={!hasSelected}
-                title="Delete Selected"
-              >
-                <Trash2 size={18} />
-              </button>
+              <button className="toolbar-btn delete" onClick={deleteSelected} disabled={!hasSelected} title="Delete Selected"><Trash2 size={18} /></button>
             </div>
           </Panel>
-
           <Controls showInteractive={true} />
-          
-          <Panel position="bottom-right" style={{ fontSize: '10px', opacity: 0.6, color: 'var(--text-color)', marginBottom: '10px', marginRight: '10px' }}>
-            Himan Kalita - 2026
-          </Panel>
-
-          <Panel position="top-right" className="panel">
-            <button onClick={onClear} title="Clear Canvas" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'inherit' }}>
-              <Trash2 size={20} />
-            </button>
-          </Panel>
+          <Panel position="bottom-right" style={{ fontSize: '10px', opacity: 0.6, color: 'var(--text-color)', marginBottom: '10px', marginRight: '10px' }}>Himan Kalita - 2026</Panel>
+          <Panel position="top-right" className="panel"><button onClick={onClear} title="Clear Canvas" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'inherit' }}><Trash2 size={20} /></button></Panel>
         </ReactFlow>
       </div>
     </div>
@@ -599,9 +540,5 @@ function AppContent() {
 }
 
 export default function App() {
-  return (
-    <ReactFlowProvider>
-      <AppContent />
-    </ReactFlowProvider>
-  );
+  return <ReactFlowProvider><AppContent /></ReactFlowProvider>;
 }

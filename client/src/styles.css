@@ -253,6 +253,18 @@ aside.collapsed {
   color: var(--primary-color);
 }
 
+.attr-action-btn.active-fk {
+  color: #10b981;
+}
+
+.attribute-row.foreign-key .attr-label-container {
+  color: #10b981;
+}
+
+.attribute-row.foreign-key .inline-edit-label {
+  font-style: italic;
+}
+
 .add-attr-btn {
   width: 100%;
   padding: 6px;
