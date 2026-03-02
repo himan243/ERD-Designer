@@ -39,9 +39,13 @@ import {
   X,
   Menu,
   ChevronLeft,
+  ChevronDown,
+  ChevronRight,
   Undo2,
   Redo2,
   Link,
+  FileUp,
+  Info,
 } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import './styles.css';
@@ -58,12 +62,14 @@ interface ERNodeData extends Record<string, unknown> {
   label: string;
   attributes?: Attribute[];
   isNew?: boolean;
+  isCollapsed?: boolean;
   onLabelChange: (id: string, label: string) => void;
   onAddAttribute?: (id: string) => void;
   onUpdateAttribute?: (nodeId: string, attrId: string, name: string) => void;
   onDeleteAttribute?: (nodeId: string, attrId: string) => void;
   onTogglePrimary?: (nodeId: string, attrId: string) => void;
   onToggleForeign?: (nodeId: string, attrId: string) => void;
+  onToggleCollapse?: (nodeId: string) => void;
   onCardinalityChange?: (nodeId: string, handleId: string, val: string) => void;
   cardinality?: Record<string, string>;
 }
@@ -171,48 +177,59 @@ const CornerPicker = ({ nodeId, handleIds, pos, data }: { nodeId: string; handle
 };
 
 const EntityNode = ({ data, selected, id }: NodeProps<ERNode>) => {
+  const isCollapsed = !!data.isCollapsed;
+
   return (
     <div className={`entity-table ${selected ? 'selected' : ''}`}>
-      <NodeResizer minWidth={160} isVisible={selected} handleStyle={{ width: 8, height: 8 }} />
+      <NodeResizer minWidth={160} isVisible={selected && !isCollapsed} handleStyle={{ width: 8, height: 8 }} />
       <div className="entity-header">
+        <button className="collapse-toggle" onClick={(e) => { e.stopPropagation(); data.onToggleCollapse?.(id); }}>
+          {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+        </button>
         <InlineEdit value={data.label} onSave={(v) => data.onLabelChange(id, v)} startEditing={data.isNew} />
       </div>
-      <div className="entity-attributes">
-        {data.attributes?.map((attr) => (
-          <div key={attr.id} className={`attribute-row ${attr.isPrimary ? 'primary-key' : ''} ${attr.isForeign ? 'foreign-key' : ''}`}>
-            <div className="attr-label-container">
-              <div style={{ display: 'flex', gap: '2px', width: '24px', flexShrink: 0 }}>
-                {attr.isPrimary && <Key size={10} color="#2563eb" />}
-                {attr.isForeign && <Link size={10} color="#10b981" />}
+      
+      {!isCollapsed && (
+        <>
+          <div className="entity-attributes">
+            {data.attributes?.map((attr) => (
+              <div key={attr.id} className={`attribute-row ${attr.isPrimary ? 'primary-key' : ''} ${attr.isForeign ? 'foreign-key' : ''}`}>
+                <div className="attr-label-container">
+                  <div style={{ display: 'flex', gap: '2px', width: '24px', flexShrink: 0 }}>
+                    {attr.isPrimary && <Key size={10} color="#2563eb" />}
+                    {attr.isForeign && <Link size={10} color="#10b981" />}
+                  </div>
+                  <InlineEdit 
+                    value={attr.name} 
+                    onSave={(v) => data.onUpdateAttribute?.(id, attr.id, v)} 
+                    startEditing={attr.isNew}
+                    className="attr-name"
+                  />
+                </div>
+                <div className="attr-actions">
+                  <button className={`attr-action-btn ${attr.isPrimary ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); data.onTogglePrimary?.(id, attr.id); }} title="Toggle PK">
+                    <Key size={12} />
+                  </button>
+                  <button className={`attr-action-btn ${attr.isForeign ? 'active-fk' : ''}`} onClick={(e) => { e.stopPropagation(); data.onToggleForeign?.(id, attr.id); }} title="Toggle FK">
+                    <Link size={12} />
+                  </button>
+                  <button className="attr-action-btn delete" onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm('Delete this attribute?')) {
+                      data.onDeleteAttribute?.(id, attr.id);
+                    }
+                  }} title="Delete Attribute">
+                    <X size={12} />
+                  </button>
+                </div>
               </div>
-              <InlineEdit 
-                value={attr.name} 
-                onSave={(v) => data.onUpdateAttribute?.(id, attr.id, v)} 
-                startEditing={attr.isNew}
-              />
-            </div>
-            <div className="attr-actions">
-              <button className={`attr-action-btn ${attr.isPrimary ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); data.onTogglePrimary?.(id, attr.id); }} title="Toggle PK">
-                <Key size={12} />
-              </button>
-              <button className={`attr-action-btn ${attr.isForeign ? 'active-fk' : ''}`} onClick={(e) => { e.stopPropagation(); data.onToggleForeign?.(id, attr.id); }} title="Toggle FK">
-                <Link size={12} />
-              </button>
-              <button className="attr-action-btn delete" onClick={(e) => {
-                e.stopPropagation();
-                if (window.confirm('Delete this attribute?')) {
-                  data.onDeleteAttribute?.(id, attr.id);
-                }
-              }} title="Delete Attribute">
-                <X size={12} />
-              </button>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <button className="add-attr-btn" onClick={(e) => { e.stopPropagation(); data.onAddAttribute?.(id); }}>
-        <Plus size={14} />
-      </button>
+          <button className="add-attr-btn" onClick={(e) => { e.stopPropagation(); data.onAddAttribute?.(id); }}>
+            <Plus size={14} />
+          </button>
+        </>
+      )}
 
       <Handle type="source" position={Position.Top} id="t" />
       <Handle type="source" position={Position.Bottom} id="b" />
@@ -266,6 +283,8 @@ function AppContent() {
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
   const [isDark, setIsDark] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [sqlText, setSqlText] = useState('');
 
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
@@ -377,6 +396,10 @@ function AppContent() {
     }));
   }, [setNodes, saveToHistory]);
 
+  const onToggleCollapse = useCallback((nodeId: string) => {
+    setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, isCollapsed: !n.data.isCollapsed } } : n));
+  }, [setNodes]);
+
   const onCardinalityChange = useCallback((nodeId: string, handleId: string, val: string) => {
     saveToHistory();
     setNodes(nds => nds.map(n => {
@@ -396,14 +419,16 @@ function AppContent() {
       const dx = targetNode.position.x - sourceNode.position.x;
       const dy = targetNode.position.y - sourceNode.position.y;
       const midpoint = { x: sourceNode.position.x + dx / 2, y: sourceNode.position.y + dy / 2 };
-      let sourceH, relTargetH, relSourceH, targetH;
+      
+      let sH, rtH, rsH, tH;
       if (Math.abs(dx) > Math.abs(dy)) {
-        if (dx > 0) { sourceH = 'r'; relTargetH = 'l-t'; relSourceH = 'r'; targetH = 'l-t'; }
-        else { sourceH = 'l'; relTargetH = 'r-t'; relSourceH = 'l'; targetH = 'r-t'; }
+        if (dx > 0) { sH = 'r'; rtH = 'l-t'; rsH = 'r'; tH = 'l-t'; }
+        else { sH = 'l'; rtH = 'r-t'; rsH = 'l'; tH = 'r-t'; }
       } else {
-        if (dy > 0) { sourceH = 'b'; relTargetH = 't-t'; relSourceH = 'b'; targetH = 't-t'; }
-        else { sourceH = 't'; relTargetH = 'b-t'; relSourceH = 't'; targetH = 'b-t'; }
+        if (dy > 0) { sH = 'b'; rtH = 't-t'; rsH = 'b'; tH = 't-t'; }
+        else { sH = 't'; rtH = 'b-t'; rsH = 't'; tH = 'b-t'; }
       }
+
       const newRelNode: ERNode = {
         id: relId,
         type: 'relationship',
@@ -412,14 +437,14 @@ function AppContent() {
           label: 'Relationship',
           cardinality: {},
           isNew: true,
-          onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onCardinalityChange
+          onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange
         },
       };
       setNodes(nds => nds.concat(newRelNode));
       setEdges(eds => [
         ...eds,
-        { id: `e_${Date.now()}_1`, source: params.source!, target: relId, sourceHandle: sourceH, targetHandle: relTargetH, type: 'erEdge' },
-        { id: `e_${Date.now()}_2`, source: relId, target: params.target!, sourceHandle: relSourceH, targetHandle: targetH, type: 'erEdge' }
+        { id: `e_${Date.now()}_1`, source: params.source!, target: relId, sourceHandle: sH, targetHandle: rtH, type: 'erEdge' },
+        { id: `e_${Date.now()}_2`, source: relId, target: params.target!, sourceHandle: rsH, targetHandle: tH, type: 'erEdge' }
       ]);
       return;
     }
@@ -429,7 +454,7 @@ function AppContent() {
     }
     saveToHistory();
     setEdges((eds) => addEdge({ ...params, type: 'erEdge' }, eds));
-  }, [setEdges, setNodes, saveToHistory, onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onCardinalityChange]);
+  }, [setEdges, setNodes, saveToHistory, onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     if (changes.some(c => c.type === 'position' || c.type === 'remove')) { saveToHistory(); }
@@ -452,11 +477,11 @@ function AppContent() {
         attributes: type === 'entity' ? [{ id: '1', name: 'id', isPrimary: true, isForeign: false }] : [],
         cardinality: {},
         isNew: true,
-        onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onCardinalityChange
+        onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange
       },
     };
     setNodes((nds) => nds.concat(newNode));
-  }, [onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onCardinalityChange, setNodes, saveToHistory]);
+  }, [onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange, setNodes, saveToHistory]);
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -472,6 +497,130 @@ function AppContent() {
     const position = reactFlowInstance.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
     createNewNode(type, position);
     if (window.innerWidth <= 768) setIsSidebarOpen(false);
+  };
+
+  const handleImportSQL = () => {
+    if (!sqlText.trim()) return;
+    saveToHistory();
+
+    const cleanSql = sqlText
+      .replace(/--.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^INSERT\s+INTO[\s\S]*?;/gmi, '')
+      .replace(/^LOCK\s+TABLES[\s\S]*?UNLOCK\s+TABLES;/gmi, '')
+      .replace(/^DROP\s+TABLE[\s\S]*?;/gmi, '')
+      .replace(/^SET\s+[\s\S]*?;/gmi, '')
+      .replace(/\n\s*\n/g, '\n');
+
+    const tables: ERNode[] = [];
+    const relEdges: Edge[] = [];
+    const startRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[`"[])?([^`"\]\s\(\)]+)(?:[`"\]])?\s*\(/gi;
+    let match;
+    
+    const fkMap = new Map<string, string[]>(); // tableName -> list of target tables
+
+    while ((match = startRegex.exec(cleanSql)) !== null) {
+      const tableName = match[1];
+      const startPos = startRegex.lastIndex;
+      let depth = 1, endPos = startPos;
+      while (depth > 0 && endPos < cleanSql.length) {
+        if (cleanSql[endPos] === '(') depth++;
+        else if (cleanSql[endPos] === ')') depth--;
+        endPos++;
+      }
+      const tableContent = cleanSql.substring(startPos, endPos - 1);
+      const attributes: Attribute[] = [];
+      const lines = tableContent.split('\n').map(l => l.trim()).filter(l => l);
+      
+      const tableLevelPKs = new Set<string>();
+      const pkMatch = /PRIMARY\s+KEY\s*\(([^)]+)\)/i.exec(tableContent);
+      if (pkMatch) pkMatch[1].split(',').forEach(k => tableLevelPKs.add(k.replace(/[`"[]/g, '').trim()));
+
+      lines.forEach((line) => {
+        const fkMatch = /FOREIGN\s+KEY\s*\(([^)]+)\)\s+REFERENCES\s+(?:[`"[])?([^`"\]\s]+)(?:[`"\]])?\s*\(([^)]+)\)/i.exec(line);
+        if (fkMatch) {
+          const sourceCols = fkMatch[1].replace(/[`"[]/g, '').split(',').map(c => c.trim());
+          const targetTable = fkMatch[2].replace(/[`"[]/g, '');
+          if (!fkMap.has(tableName)) fkMap.set(tableName, []);
+          sourceCols.forEach(c => fkMap.get(tableName)!.push(c));
+          // Store raw relationship data, will create edges after positioning
+          (relEdges as any).push({ from: tableName, to: targetTable });
+          return;
+        }
+        if (/^\s*(PRIMARY|FOREIGN|CONSTRAINT|KEY|UNIQUE|INDEX|CHECK)/i.test(line)) return;
+        const colMatch = /^(?:[`"[])?([^`"\]\s]+)(?:[`"\]])?/.exec(line);
+        if (!colMatch) return;
+        const colName = colMatch[1];
+        if (colName.toUpperCase() === 'CREATE' || colName.toUpperCase() === 'TABLE') return;
+        attributes.push({
+          id: `attr_${tableName}_${attributes.length}`,
+          name: colName,
+          isPrimary: tableLevelPKs.has(colName) || /PRIMARY\s+KEY/i.test(line),
+          isForeign: false,
+          isNew: false
+        });
+      });
+
+      tables.push({
+        id: `node_${tableName}`,
+        type: 'entity',
+        position: { x: 0, y: 0 },
+        data: {
+          label: tableName, attributes, isNew: false,
+          onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange
+        }
+      });
+    }
+
+    const columnsCount = Math.ceil(Math.sqrt(tables.length));
+    const spacing = 500;
+    const finalNodes = tables.map((node, i) => ({
+      ...node,
+      position: { x: (i % columnsCount) * spacing, y: Math.floor(i / columnsCount) * spacing }
+    }));
+
+    // Post-tag FKs
+    finalNodes.forEach(node => {
+      const fks = fkMap.get(node.data.label) || [];
+      node.data.attributes = node.data.attributes?.map(a => ({ ...a, isForeign: fks.includes(a.name) }));
+    });
+
+    // Create proper edges with smart handle selection
+    const finalEdges: Edge[] = (relEdges as any).map((rel: any, idx: number) => {
+      const source = finalNodes.find(n => n.data.label === rel.from);
+      const target = finalNodes.find(n => n.data.label === rel.to);
+      if (!source || !target) return null;
+
+      const dx = target.position.x - source.position.x;
+      const dy = target.position.y - source.position.y;
+      let sH, tH;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 0) { sH = 'r'; tH = 'l-t'; } else { sH = 'l'; tH = 'r-t'; }
+      } else {
+        if (dy > 0) { sH = 'b'; tH = 't-t'; } else { sH = 't'; tH = 'b-t'; }
+      }
+
+      return {
+        id: `e_import_${idx}_${rel.from}_${rel.to}`,
+        source: source.id,
+        target: target.id,
+        sourceHandle: sH,
+        targetHandle: tH,
+        type: 'erEdge'
+      };
+    }).filter(Boolean);
+
+    setNodes(nds => {
+      const filtered = nds.filter(n => !finalNodes.some(fn => fn.id === n.id));
+      return [...filtered, ...finalNodes];
+    });
+    setEdges(eds => {
+      const filtered = eds.filter(e => !finalEdges.some(fe => fe.id === e.id));
+      return [...filtered, ...finalEdges];
+    });
+    setIsImportModalOpen(false);
+    setSqlText('');
+    setTimeout(() => { if (reactFlowInstance) reactFlowInstance.fitView({ padding: 0.2 }); }, 200);
   };
 
   useEffect(() => {
@@ -498,9 +647,9 @@ function AppContent() {
   useEffect(() => {
     setNodes(nds => nds.map(n => ({
       ...n,
-      data: { ...n.data, onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onCardinalityChange }
+      data: { ...n.data, onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange }
     })));
-  }, [onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onCardinalityChange, setNodes]);
+  }, [onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange, setNodes]);
 
   const hasSelected = nodes.some(n => n.selected) || edges.some(e => e.selected);
 
@@ -515,10 +664,42 @@ function AppContent() {
           <div className="dndnode entity" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'entity'); }} onClick={() => handleSidebarItemClick('entity')} draggable title="Add Entity (Ctrl+E)">
             <Square size={18} /> Entity
           </div>
-          <div className="dndnode relationship" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'relationship'); }} onClick={() => handleSidebarItemClick('relationship')} draggable><Diamond size={18} /> Relationship</div>
+          <div className="dndnode relationship" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'relationship'); }} onClick={() => handleSidebarItemClick('relationship')} draggable>
+            <Diamond size={18} /> Relationship
+          </div>
+          <div style={{ height: '1px', background: 'var(--border-color)', margin: '8px 0' }} />
+          <button className="import-btn" onClick={() => setIsImportModalOpen(true)}>
+            <FileUp size={18} /> Import SQL Schema
+          </button>
         </div>
         <button className="theme-toggle" onClick={() => setIsDark(!isDark)}>{isDark ? <Sun size={18} /> : <Moon size={18} />}{isDark ? 'Light Mode' : 'Dark Mode'}</button>
       </aside>
+
+      {isImportModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsImportModalOpen(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Import SQL Schema</h3>
+              <button className="close-btn" onClick={() => setIsImportModalOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="import-instructions">
+              <div className="instruction-header"><Info size={16} /> How to export from MySQL Workbench:</div>
+              <ol>
+                <li>Open <strong>MySQL Workbench</strong> and connect to your instance.</li>
+                <li>Click on <strong>Server</strong> &gt; <strong>Data Export</strong>.</li>
+                <li>Select your <strong>Schema</strong> and choose <strong>Export to Self-Contained File</strong>.</li>
+                <li>Click <strong>Start Export</strong>, then copy and paste the file content below.</li>
+              </ol>
+            </div>
+            <textarea className="sql-textarea" placeholder="Paste your CREATE TABLE statements here..." value={sqlText} onChange={(e) => setSqlText(e.target.value)} />
+            <div className="modal-actions">
+              <button className="cancel-btn" onClick={() => setIsImportModalOpen(false)}>Cancel</button>
+              <button className="confirm-btn" onClick={handleImportSQL} disabled={!sqlText.trim()}>Import Schema</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="reactflow-wrapper">
         <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onInit={setReactFlowInstance} onDrop={onDrop} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView panOnScroll={false} panOnDrag={true} selectionOnDrag={false} zoomOnPinch={true} zoomOnScroll={true} connectionRadius={50} attributionPosition="bottom-right">
           <Background color={isDark ? '#334155' : '#cbd5e1'} gap={20} />
