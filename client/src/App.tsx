@@ -310,22 +310,6 @@ function AppContent() {
     document.title = "ERD Designer";
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); setIsSidebarOpen(prev => !prev); }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        // Only trigger if not typing in an input
-        if (document.activeElement?.tagName !== 'INPUT') {
-          deleteSelected();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, deleteSelected]);
-
   const onLabelChange = useCallback((id: string, label: string) => {
     saveToHistory();
     setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, label, isNew: false } } : n));
@@ -493,6 +477,24 @@ function AppContent() {
     if (window.innerWidth <= 768) setIsSidebarOpen(false);
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (document.activeElement?.tagName === 'INPUT' || (document.activeElement as HTMLElement)?.isContentEditable) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); setIsSidebarOpen(prev => !prev); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'e') { e.preventDefault(); handleSidebarItemClick('entity'); }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        deleteSelected();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo, deleteSelected, handleSidebarItemClick]);
+
   const onClear = () => {
     if (window.confirm('Are you sure you want to clear the entire diagram?')) {
       saveToHistory();
@@ -526,7 +528,7 @@ function AppContent() {
         </div>
         
         <div className="sidebar-content">
-          <div className="dndnode entity" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'entity'); }} onClick={() => handleSidebarItemClick('entity')} draggable>
+          <div className="dndnode entity" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'entity'); }} onClick={() => handleSidebarItemClick('entity')} draggable title="Add Entity (Ctrl+E)">
             <Square size={18} /> Entity
           </div>
           <div className="dndnode relationship" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'relationship'); }} onClick={() => handleSidebarItemClick('relationship')} draggable>
