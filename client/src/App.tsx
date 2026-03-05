@@ -43,6 +43,7 @@ import {
   Redo2,
   FileUp,
   Info,
+  LayoutTemplate,
 } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import './styles.css';
@@ -603,6 +604,77 @@ function AppContent() {
     setTimeout(() => { if (reactFlowInstance) reactFlowInstance.fitView({ padding: 0.2 }); }, 200);
   };
 
+  const autoFormat = useCallback(() => {
+    saveToHistory();
+    const entityNodes = nodesRef.current.filter(n => n.type === 'entity');
+    const attributeNodes = nodesRef.current.filter(n => n.type === 'attribute');
+    const relationshipNodes = nodesRef.current.filter(n => n.type === 'relationship');
+    
+    const spacing = 600;
+    const columns = Math.ceil(Math.sqrt(entityNodes.length || 1));
+    
+    const newNodes = [...nodesRef.current];
+    
+    // 1. Layout Entities in a grid
+    entityNodes.forEach((entity, i) => {
+      const col = i % columns;
+      const row = Math.floor(i / columns);
+      const ex = col * spacing;
+      const ey = row * spacing;
+      
+      const nodeIdx = newNodes.findIndex(n => n.id === entity.id);
+      newNodes[nodeIdx] = { ...newNodes[nodeIdx], position: { x: ex, y: ey } };
+      
+      // 2. Find attributes connected to this entity and layout them in a circle
+      const connectedAttrIds = edgesRef.current
+        .filter(e => e.source === entity.id || e.target === entity.id)
+        .map(e => e.source === entity.id ? e.target : e.source)
+        .filter(id => attributeNodes.some(an => an.id === id));
+        
+      connectedAttrIds.forEach((attrId, ai) => {
+        const angle = (ai / connectedAttrIds.length) * 2 * Math.PI;
+        const radius = 180;
+        const ax = ex + radius * Math.cos(angle);
+        const ay = ey + radius * Math.sin(angle);
+        
+        const attrIdx = newNodes.findIndex(n => n.id === attrId);
+        if (attrIdx !== -1) {
+          newNodes[attrIdx] = { ...newNodes[attrIdx], position: { x: ax, y: ay } };
+        }
+      });
+    });
+    
+    // 3. Layout Relationships at the midpoint of their connected entities
+    relationshipNodes.forEach(rel => {
+      const connectedEdges = edgesRef.current.filter(e => e.source === rel.id || e.target === rel.id);
+      const connectedEntityNodes = connectedEdges
+        .map(e => e.source === rel.id ? e.target : e.source)
+        .map(id => newNodes.find(n => n.id === id && n.type === 'entity'))
+        .filter(Boolean);
+        
+      if (connectedEntityNodes.length > 0) {
+        const relIdx = newNodes.findIndex(n => n.id === rel.id);
+        
+        // Special case: self-referencing relationship (recursive)
+        const uniqueEntities = Array.from(new Set(connectedEntityNodes.map(n => n!.id)));
+        if (uniqueEntities.length === 1) {
+          const entity = connectedEntityNodes[0]!;
+          newNodes[relIdx] = { 
+            ...newNodes[relIdx], 
+            position: { x: entity.position.x, y: entity.position.y - 120 } 
+          };
+        } else if (connectedEntityNodes.length >= 2) {
+          const avgX = connectedEntityNodes.reduce((sum, n) => sum + n!.position.x, 0) / connectedEntityNodes.length;
+          const avgY = connectedEntityNodes.reduce((sum, n) => sum + n!.position.y, 0) / connectedEntityNodes.length;
+          newNodes[relIdx] = { ...newNodes[relIdx], position: { x: avgX, y: avgY } };
+        }
+      }
+    });
+    
+    setNodes(newNodes);
+    setTimeout(() => { if (reactFlowInstance) reactFlowInstance.fitView({ padding: 0.2 }); }, 200);
+  }, [setNodes, saveToHistory, reactFlowInstance]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (document.activeElement?.tagName === 'INPUT' || (document.activeElement as HTMLElement)?.isContentEditable) return;
@@ -610,6 +682,7 @@ function AppContent() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); setIsSidebarOpen(prev => !prev); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'e') { e.preventDefault(); handleSidebarItemClick('entity'); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); autoFormat(); }
       if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -690,6 +763,8 @@ function AppContent() {
             <div className="action-toolbar">
               <button className="toolbar-btn" onClick={undo} title="Undo (Ctrl+Z)"><Undo2 size={18} /></button>
               <button className="toolbar-btn" onClick={redo} title="Redo (Ctrl+Y)"><Redo2 size={18} /></button>
+              <div style={{ width: '1px', background: 'var(--border-color)', margin: '0 4px' }} />
+              <button className="toolbar-btn" onClick={autoFormat} title="Auto Format (Ctrl+A)"><LayoutTemplate size={18} /></button>
               <div style={{ width: '1px', background: 'var(--border-color)', margin: '0 4px' }} />
               <button className="toolbar-btn delete" onClick={deleteSelected} disabled={!hasSelected} title="Delete Selected"><Trash2 size={18} /></button>
             </div>
