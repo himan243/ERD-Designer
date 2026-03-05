@@ -39,37 +39,22 @@ import {
   X,
   Menu,
   ChevronLeft,
-  ChevronDown,
-  ChevronRight,
   Undo2,
   Redo2,
-  Link,
   FileUp,
   Info,
 } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import './styles.css';
 
-interface Attribute {
-  id: string;
-  name: string;
-  isPrimary?: boolean;
-  isForeign?: boolean;
-  isNew?: boolean;
-}
-
 interface ERNodeData extends Record<string, unknown> {
   label: string;
-  attributes?: Attribute[];
   isNew?: boolean;
   isCollapsed?: boolean;
+  isPrimary?: boolean;
   onLabelChange: (id: string, label: string) => void;
   onAddAttribute?: (id: string) => void;
-  onUpdateAttribute?: (nodeId: string, attrId: string, name: string) => void;
-  onDeleteAttribute?: (nodeId: string, attrId: string) => void;
-  onTogglePrimary?: (nodeId: string, attrId: string) => void;
-  onToggleForeign?: (nodeId: string, attrId: string) => void;
-  onToggleCollapse?: (nodeId: string) => void;
+  onTogglePrimary?: (id: string) => void;
   onCardinalityChange?: (nodeId: string, handleId: string, val: string) => void;
   cardinality?: Record<string, string>;
 }
@@ -78,14 +63,14 @@ type ERNode = Node<ERNodeData>;
 
 const InlineEdit = ({ value, onSave, className = "", startEditing = false }: { value: string; onSave: (v: string) => void; className?: string; startEditing?: boolean }) => {
   const [editing, setEditing] = useState(startEditing);
-  const [val, setVal] = useState(value);
   const lastClickTime = useRef(0);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const spanRef = useRef<HTMLSpanElement>(null);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
       setEditing(false);
-      onSave(val);
+      onSave(spanRef.current?.innerText || value);
     }
   };
 
@@ -98,33 +83,44 @@ const InlineEdit = ({ value, onSave, className = "", startEditing = false }: { v
   };
 
   useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.setSelectionRange(0, inputRef.current.value.length);
+    if (editing && spanRef.current) {
+      const span = spanRef.current;
+      // Use a small timeout to ensure the element is ready and visible
+      const timer = setTimeout(() => {
+        span.focus();
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(span);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }, 50);
+      return () => clearTimeout(timer);
     }
   }, [editing]);
 
-  if (editing) {
-    return (
-      <input 
-        ref={inputRef}
-        className="inline-edit"
-        value={val} 
-        onChange={e => setVal(e.target.value)}
-        onBlur={() => { setEditing(false); onSave(val); }}
-        onKeyDown={handleKeyDown}
-      />
-    );
-  }
   return (
-    <div 
-      className={className} 
+    <span
+      ref={spanRef}
+      className={`${className} ${editing ? 'inline-edit-active' : ''}`}
+      contentEditable={editing}
+      suppressContentEditableWarning={true}
       onClick={handleClick}
       onDoubleClick={() => setEditing(true)}
-      style={{ cursor: 'pointer', userSelect: 'none', touchAction: 'manipulation' }}
+      onBlur={() => { setEditing(false); onSave(spanRef.current?.innerText || value); }}
+      onKeyDown={handleKeyDown}
+      style={{ 
+        cursor: 'pointer', 
+        userSelect: 'none', 
+        touchAction: 'manipulation',
+        display: 'inline-block',
+        minWidth: '20px',
+        outline: 'none',
+        wordBreak: 'break-word',
+        textAlign: 'center'
+      }}
     >
       {value}
-    </div>
+    </span>
   );
 };
 
@@ -177,59 +173,43 @@ const CornerPicker = ({ nodeId, handleIds, pos, data }: { nodeId: string; handle
 };
 
 const EntityNode = ({ data, selected, id }: NodeProps<ERNode>) => {
-  const isCollapsed = !!data.isCollapsed;
-
   return (
     <div className={`entity-table ${selected ? 'selected' : ''}`}>
-      <NodeResizer minWidth={160} isVisible={selected && !isCollapsed} handleStyle={{ width: 8, height: 8 }} />
+      <NodeResizer minWidth={140} minHeight={50} isVisible={selected} handleStyle={{ width: 8, height: 8 }} />
       <div className="entity-header">
-        <button className="collapse-toggle" onClick={(e) => { e.stopPropagation(); data.onToggleCollapse?.(id); }}>
-          {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-        </button>
         <InlineEdit value={data.label} onSave={(v) => data.onLabelChange(id, v)} startEditing={data.isNew} />
       </div>
       
-      {!isCollapsed && (
-        <>
-          <div className="entity-attributes">
-            {data.attributes?.map((attr) => (
-              <div key={attr.id} className={`attribute-row ${attr.isPrimary ? 'primary-key' : ''} ${attr.isForeign ? 'foreign-key' : ''}`}>
-                <div className="attr-label-container">
-                  <div style={{ display: 'flex', gap: '2px', width: '24px', flexShrink: 0 }}>
-                    {attr.isPrimary && <Key size={10} color="#2563eb" />}
-                    {attr.isForeign && <Link size={10} color="#10b981" />}
-                  </div>
-                  <InlineEdit 
-                    value={attr.name} 
-                    onSave={(v) => data.onUpdateAttribute?.(id, attr.id, v)} 
-                    startEditing={attr.isNew}
-                    className="attr-name"
-                  />
-                </div>
-                <div className="attr-actions">
-                  <button className={`attr-action-btn ${attr.isPrimary ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); data.onTogglePrimary?.(id, attr.id); }} title="Toggle PK">
-                    <Key size={12} />
-                  </button>
-                  <button className={`attr-action-btn ${attr.isForeign ? 'active-fk' : ''}`} onClick={(e) => { e.stopPropagation(); data.onToggleForeign?.(id, attr.id); }} title="Toggle FK">
-                    <Link size={12} />
-                  </button>
-                  <button className="attr-action-btn delete" onClick={(e) => {
-                    e.stopPropagation();
-                    if (window.confirm('Delete this attribute?')) {
-                      data.onDeleteAttribute?.(id, attr.id);
-                    }
-                  }} title="Delete Attribute">
-                    <X size={12} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <button className="add-attr-btn" onClick={(e) => { e.stopPropagation(); data.onAddAttribute?.(id); }}>
-            <Plus size={14} />
-          </button>
-        </>
-      )}
+      <button className="add-attr-btn-floating" onClick={(e) => { e.stopPropagation(); data.onAddAttribute?.(id); }} title="Add Attribute">
+        <Plus size={14} />
+      </button>
+
+      <Handle type="source" position={Position.Top} id="t" />
+      <Handle type="source" position={Position.Bottom} id="b" />
+      <Handle type="source" position={Position.Left} id="l" />
+      <Handle type="source" position={Position.Right} id="r" />
+      <Handle type="target" position={Position.Top} id="t-t" />
+      <Handle type="target" position={Position.Bottom} id="b-t" />
+      <Handle type="target" position={Position.Left} id="l-t" />
+      <Handle type="target" position={Position.Right} id="r-t" />
+    </div>
+  );
+};
+
+const AttributeNode = ({ data, selected, id }: NodeProps<ERNode>) => {
+  return (
+    <div className={`attribute-oval ${selected ? 'selected' : ''} ${data.isPrimary ? 'primary-key' : ''}`}>
+      <NodeResizer minWidth={100} minHeight={45} isVisible={selected} handleStyle={{ width: 8, height: 8 }} />
+      <div className="attribute-label-container">
+        {data.isPrimary && <Key size={12} color="#2563eb" style={{ marginRight: 4 }} />}
+        <InlineEdit value={data.label} onSave={(v) => data.onLabelChange(id, v)} startEditing={data.isNew} />
+      </div>
+      
+      <div className="attr-node-actions">
+        <button className={`attr-node-btn ${data.isPrimary ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); data.onTogglePrimary?.(id); }} title="Toggle PK">
+          <Key size={14} />
+        </button>
+      </div>
 
       <Handle type="source" position={Position.Top} id="t" />
       <Handle type="source" position={Position.Bottom} id="b" />
@@ -273,7 +253,7 @@ const EREdge = ({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosi
   return <BaseEdge path={edgePath} markerEnd={markerEnd} style={{ ...style, strokeWidth: 2 }} />;
 };
 
-const nodeTypes = { entity: EntityNode, relationship: RelationshipNode };
+const nodeTypes = { entity: EntityNode, relationship: RelationshipNode, attribute: AttributeNode };
 const edgeTypes = { erEdge: EREdge };
 
 function AppContent() {
@@ -343,62 +323,33 @@ function AppContent() {
 
   const onAddAttribute = useCallback((nodeId: string) => {
     saveToHistory();
-    setNodes(nds => nds.map(n => {
-      if (n.id === nodeId) {
-        const attributes = [...(n.data.attributes || []), { id: Date.now().toString(), name: 'new_attr', isPrimary: false, isForeign: false, isNew: true }];
-        return { ...n, data: { ...n.data, attributes } };
-      }
-      return n;
-    }));
-  }, [setNodes, saveToHistory]);
+    const entityNode = nodesRef.current.find(n => n.id === nodeId);
+    if (!entityNode) return;
 
-  const onUpdateAttribute = useCallback((nodeId: string, attrId: string, name: string) => {
+    const attrId = `node_${Date.now()}`;
+    const newAttrNode: ERNode = {
+      id: attrId,
+      type: 'attribute',
+      position: { x: entityNode.position.x + 200, y: entityNode.position.y },
+      data: { 
+        label: 'Attr',
+        isNew: true,
+        isPrimary: false,
+        onLabelChange, onAddAttribute, onTogglePrimary, onCardinalityChange
+      },
+    };
+
+    setNodes(nds => nds.concat(newAttrNode));
+    setEdges(eds => [
+      ...eds,
+      { id: `e_${Date.now()}`, source: nodeId, target: attrId, sourceHandle: 'r', targetHandle: 'l-t', type: 'erEdge' }
+    ]);
+  }, [setNodes, setEdges, onLabelChange]);
+
+  const onTogglePrimary = useCallback((id: string) => {
     saveToHistory();
-    setNodes(nds => nds.map(n => {
-      if (n.id === nodeId) {
-        const attributes = n.data.attributes?.map(a => a.id === attrId ? { ...a, name, isNew: false } : a);
-        return { ...n, data: { ...n.data, attributes } };
-      }
-      return n;
-    }));
+    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, isPrimary: !n.data.isPrimary } } : n));
   }, [setNodes, saveToHistory]);
-
-  const onDeleteAttribute = useCallback((nodeId: string, attrId: string) => {
-    saveToHistory();
-    setNodes(nds => nds.map(n => {
-      if (n.id === nodeId) {
-        const attributes = n.data.attributes?.filter(a => a.id !== attrId);
-        return { ...n, data: { ...n.data, attributes } };
-      }
-      return n;
-    }));
-  }, [setNodes, saveToHistory]);
-
-  const onTogglePrimary = useCallback((nodeId: string, attrId: string) => {
-    saveToHistory();
-    setNodes(nds => nds.map(n => {
-      if (n.id === nodeId) {
-        const attributes = n.data.attributes?.map(a => a.id === attrId ? { ...a, isPrimary: !a.isPrimary } : a);
-        return { ...n, data: { ...n.data, attributes } };
-      }
-      return n;
-    }));
-  }, [setNodes, saveToHistory]);
-
-  const onToggleForeign = useCallback((nodeId: string, attrId: string) => {
-    saveToHistory();
-    setNodes(nds => nds.map(n => {
-      if (n.id === nodeId) {
-        const attributes = n.data.attributes?.map(a => a.id === attrId ? { ...a, isForeign: !a.isForeign } : a);
-        return { ...n, data: { ...n.data, attributes } };
-      }
-      return n;
-    }));
-  }, [setNodes, saveToHistory]);
-
-  const onToggleCollapse = useCallback((nodeId: string) => {
-    setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, isCollapsed: !n.data.isCollapsed } } : n));
-  }, [setNodes]);
 
   const onCardinalityChange = useCallback((nodeId: string, handleId: string, val: string) => {
     saveToHistory();
@@ -413,6 +364,7 @@ function AppContent() {
   const onConnect: OnConnect = useCallback((params) => {
     const sourceNode = nodesRef.current.find(n => n.id === params.source);
     const targetNode = nodesRef.current.find(n => n.id === params.target);
+    
     if (sourceNode?.type === 'entity' && targetNode?.type === 'entity') {
       saveToHistory();
       const relId = `node_${Date.now()}`;
@@ -437,7 +389,7 @@ function AppContent() {
           label: 'Relationship',
           cardinality: {},
           isNew: true,
-          onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange
+          onLabelChange, onAddAttribute, onTogglePrimary, onCardinalityChange
         },
       };
       setNodes(nds => nds.concat(newRelNode));
@@ -448,13 +400,20 @@ function AppContent() {
       ]);
       return;
     }
-    if (sourceNode?.type === targetNode?.type) {
-      alert(`${sourceNode?.type === 'entity' ? 'Entities' : 'Relationships'} cannot be connected directly.`);
+
+    if (sourceNode?.type === 'attribute' && targetNode?.type === 'attribute') {
+      alert('Attributes cannot be connected directly.');
       return;
     }
+
+    if (sourceNode?.type === 'relationship' && targetNode?.type === 'relationship') {
+      alert('Relationships cannot be connected directly.');
+      return;
+    }
+
     saveToHistory();
     setEdges((eds) => addEdge({ ...params, type: 'erEdge' }, eds));
-  }, [setEdges, setNodes, saveToHistory, onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange]);
+  }, [setEdges, setNodes, saveToHistory, onLabelChange, onAddAttribute, onTogglePrimary, onCardinalityChange]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     if (changes.some(c => c.type === 'position' || c.type === 'remove')) { saveToHistory(); }
@@ -468,20 +427,25 @@ function AppContent() {
 
   const createNewNode = useCallback((type: string, position: { x: number, y: number }) => {
     saveToHistory();
+    const labels: Record<string, string> = {
+      entity: 'Entity',
+      attribute: 'Attr',
+      relationship: 'Rel'
+    };
     const newNode: ERNode = {
       id: `node_${Date.now()}`,
       type,
       position,
       data: { 
-        label: type.charAt(0).toUpperCase() + type.slice(1),
-        attributes: type === 'entity' ? [{ id: '1', name: 'id', isPrimary: true, isForeign: false }] : [],
+        label: labels[type] || 'Node',
         cardinality: {},
         isNew: true,
-        onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange
+        isPrimary: false,
+        onLabelChange, onAddAttribute, onTogglePrimary, onCardinalityChange
       },
     };
     setNodes((nds) => nds.concat(newNode));
-  }, [onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange, setNodes, saveToHistory]);
+  }, [onLabelChange, onAddAttribute, onTogglePrimary, onCardinalityChange, setNodes, saveToHistory]);
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -513,12 +477,12 @@ function AppContent() {
       .replace(/\n\s*\n/g, '\n');
 
     const tables: ERNode[] = [];
+    const attributes: ERNode[] = [];
     const relEdges: Edge[] = [];
+    const attrEdges: Edge[] = [];
     const startRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[`"[])?([^`"\]\s\(\)]+)(?:[`"\]])?\s*\(/gi;
     let match;
     
-    const fkMap = new Map<string, string[]>(); // tableName -> list of target tables
-
     while ((match = startRegex.exec(cleanSql)) !== null) {
       const tableName = match[1];
       const startPos = startRegex.lastIndex;
@@ -529,21 +493,28 @@ function AppContent() {
         endPos++;
       }
       const tableContent = cleanSql.substring(startPos, endPos - 1);
-      const attributes: Attribute[] = [];
       const lines = tableContent.split('\n').map(l => l.trim()).filter(l => l);
       
       const tableLevelPKs = new Set<string>();
       const pkMatch = /PRIMARY\s+KEY\s*\(([^)]+)\)/i.exec(tableContent);
       if (pkMatch) pkMatch[1].split(',').forEach(k => tableLevelPKs.add(k.replace(/[`"[]/g, '').trim()));
 
+      const tableId = `node_${tableName}`;
+      tables.push({
+        id: tableId,
+        type: 'entity',
+        position: { x: 0, y: 0 },
+        data: {
+          label: tableName, isNew: false,
+          onLabelChange, onAddAttribute, onTogglePrimary, onCardinalityChange
+        }
+      });
+
+      let attrCount = 0;
       lines.forEach((line) => {
         const fkMatch = /FOREIGN\s+KEY\s*\(([^)]+)\)\s+REFERENCES\s+(?:[`"[])?([^`"\]\s]+)(?:[`"\]])?\s*\(([^)]+)\)/i.exec(line);
         if (fkMatch) {
-          const sourceCols = fkMatch[1].replace(/[`"[]/g, '').split(',').map(c => c.trim());
           const targetTable = fkMatch[2].replace(/[`"[]/g, '');
-          if (!fkMap.has(tableName)) fkMap.set(tableName, []);
-          sourceCols.forEach(c => fkMap.get(tableName)!.push(c));
-          // Store raw relationship data, will create edges after positioning
           (relEdges as any).push({ from: tableName, to: targetTable });
           return;
         }
@@ -552,43 +523,52 @@ function AppContent() {
         if (!colMatch) return;
         const colName = colMatch[1];
         if (colName.toUpperCase() === 'CREATE' || colName.toUpperCase() === 'TABLE') return;
+        
+        const attrNodeId = `attr_${tableName}_${colName}`;
         attributes.push({
-          id: `attr_${tableName}_${attributes.length}`,
-          name: colName,
-          isPrimary: tableLevelPKs.has(colName) || /PRIMARY\s+KEY/i.test(line),
-          isForeign: false,
-          isNew: false
+          id: attrNodeId,
+          type: 'attribute',
+          position: { x: 0, y: 0 },
+          data: {
+            label: colName,
+            isPrimary: tableLevelPKs.has(colName) || /PRIMARY\s+KEY/i.test(line),
+            isNew: false,
+            onLabelChange, onAddAttribute, onTogglePrimary, onCardinalityChange
+          }
         });
-      });
 
-      tables.push({
-        id: `node_${tableName}`,
-        type: 'entity',
-        position: { x: 0, y: 0 },
-        data: {
-          label: tableName, attributes, isNew: false,
-          onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange
-        }
+        attrEdges.push({
+          id: `e_${tableId}_${attrNodeId}`,
+          source: tableId,
+          target: attrNodeId,
+          type: 'erEdge'
+        });
+        attrCount++;
       });
     }
 
     const columnsCount = Math.ceil(Math.sqrt(tables.length));
-    const spacing = 500;
-    const finalNodes = tables.map((node, i) => ({
-      ...node,
-      position: { x: (i % columnsCount) * spacing, y: Math.floor(i / columnsCount) * spacing }
-    }));
+    const spacing = 600;
+    
+    const finalNodes: ERNode[] = [];
+    tables.forEach((node, i) => {
+      const tx = (i % columnsCount) * spacing;
+      const ty = Math.floor(i / columnsCount) * spacing;
+      node.position = { x: tx, y: ty };
+      finalNodes.push(node);
 
-    // Post-tag FKs
-    finalNodes.forEach(node => {
-      const fks = fkMap.get(node.data.label) || [];
-      node.data.attributes = node.data.attributes?.map(a => ({ ...a, isForeign: fks.includes(a.name) }));
+      const tableAttrs = attributes.filter(a => a.id.startsWith(`attr_${node.data.label}_`));
+      tableAttrs.forEach((attr, ai) => {
+        const angle = (ai / tableAttrs.length) * 2 * Math.PI;
+        attr.position = { x: tx + 180 * Math.cos(angle), y: ty + 120 * Math.sin(angle) };
+        finalNodes.push(attr);
+      });
     });
 
-    // Create proper edges with smart handle selection
-    const finalEdges: Edge[] = (relEdges as any).map((rel: any, idx: number) => {
-      const source = finalNodes.find(n => n.data.label === rel.from);
-      const target = finalNodes.find(n => n.data.label === rel.to);
+    // Create proper edges with smart handle selection for relationships
+    const finalRelEdges: Edge[] = (relEdges as any).map((rel: any, idx: number) => {
+      const source = finalNodes.find(n => n.data.label === rel.from && n.type === 'entity');
+      const target = finalNodes.find(n => n.data.label === rel.to && n.type === 'entity');
       if (!source || !target) return null;
 
       const dx = target.position.x - source.position.x;
@@ -601,7 +581,7 @@ function AppContent() {
       }
 
       return {
-        id: `e_import_${idx}_${rel.from}_${rel.to}`,
+        id: `e_import_rel_${idx}`,
         source: source.id,
         target: target.id,
         sourceHandle: sH,
@@ -615,8 +595,8 @@ function AppContent() {
       return [...filtered, ...finalNodes];
     });
     setEdges(eds => {
-      const filtered = eds.filter(e => !finalEdges.some(fe => fe.id === e.id));
-      return [...filtered, ...finalEdges];
+      const filtered = eds.filter(e => !finalRelEdges.some(fe => fe.id === e.id) && !attrEdges.some(ae => ae.id === e.id));
+      return [...filtered, ...finalRelEdges, ...attrEdges];
     });
     setIsImportModalOpen(false);
     setSqlText('');
@@ -647,9 +627,9 @@ function AppContent() {
   useEffect(() => {
     setNodes(nds => nds.map(n => ({
       ...n,
-      data: { ...n.data, onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange }
+      data: { ...n.data, onLabelChange, onAddAttribute, onTogglePrimary, onCardinalityChange }
     })));
-  }, [onLabelChange, onAddAttribute, onUpdateAttribute, onDeleteAttribute, onTogglePrimary, onToggleForeign, onToggleCollapse, onCardinalityChange, setNodes]);
+  }, [onLabelChange, onAddAttribute, onTogglePrimary, onCardinalityChange, setNodes]);
 
   const hasSelected = nodes.some(n => n.selected) || edges.some(e => e.selected);
 
@@ -663,6 +643,9 @@ function AppContent() {
         <div className="sidebar-content">
           <div className="dndnode entity" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'entity'); }} onClick={() => handleSidebarItemClick('entity')} draggable title="Add Entity (Ctrl+E)">
             <Square size={18} /> Entity
+          </div>
+          <div className="dndnode attribute" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'attribute'); }} onClick={() => handleSidebarItemClick('attribute')} draggable>
+            <div style={{ width: 18, height: 12, borderRadius: '50%', border: '2px solid currentColor' }} /> Attribute
           </div>
           <div className="dndnode relationship" onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', 'relationship'); }} onClick={() => handleSidebarItemClick('relationship')} draggable>
             <Diamond size={18} /> Relationship

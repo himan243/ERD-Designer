@@ -170,143 +170,134 @@ aside.collapsed {
 .entity-table {
   background: var(--node-bg);
   border: 2px solid var(--entity-color);
-  min-width: 160px;
+  min-width: 100px;
+  min-height: 40px;
+  width: auto;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  overflow: visible;
   border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 15px;
 }
 
 .entity-header {
-  background: var(--entity-color);
-  color: white;
-  padding: 10px;
   font-weight: 700;
   text-align: center;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-}
-
-.collapse-toggle {
-  background: transparent;
-  border: none;
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  padding: 2px;
-  opacity: 0.8;
-  transition: opacity 0.2s;
-}
-
-.collapse-toggle:hover {
-  opacity: 1;
-}
-
-.attribute-row {
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  position: relative;
-  min-height: 32px;
-}
-
-.attribute-row:last-child {
-  border-bottom: none;
-}
-
-.attr-label-container {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-
-.attr-name {
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-.attr-type {
-  font-size: 0.65rem;
-  opacity: 0.5;
-  margin-top: -2px;
-}
-
-.attribute-row.primary-key .attr-label-container {
-  font-weight: 700;
-  text-decoration: underline;
-  color: var(--primary-color);
-}
-
-.attr-actions {
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.2s;
-  background: var(--node-bg);
-  padding-left: 4px;
-}
-
-@media (max-width: 768px) {
-  .attr-actions { opacity: 1; }
-}
-
-.attribute-row:hover .attr-actions {
-  opacity: 1;
-}
-
-.attr-action-btn {
-  padding: 2px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--secondary-color);
-  display: flex;
-  align-items: center;
-  border-radius: 4px;
-}
-
-.attr-action-btn:hover {
-  background: var(--bg-color);
-  color: var(--primary-color);
-}
-
-.attr-action-btn.delete:hover {
-  color: var(--entity-color);
-}
-
-.attr-action-btn.active {
-  color: var(--primary-color);
-}
-
-.attr-action-btn.active-fk {
-  color: #10b981;
-}
-
-.attribute-row.foreign-key .attr-label-container {
-  color: #10b981;
-}
-
-.attribute-row.foreign-key .inline-edit-label {
-  font-style: italic;
-}
-
-.add-attr-btn {
   width: 100%;
-  padding: 6px;
-  background: transparent;
-  border: none;
-  border-top: 1px dashed var(--border-color);
-  color: var(--secondary-color);
-  cursor: pointer;
+}
+
+.add-attr-btn-floating {
+  position: absolute;
+  right: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--primary-color);
+  color: white;
+  border: 2px solid white;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.add-attr-btn-floating:hover {
+  transform: translateY(-50%) scale(1.1);
+}
+
+/* --- Attribute Oval --- */
+.attribute-oval {
+  background: var(--node-bg);
+  border: 1.5px solid var(--text-color);
+  border-radius: 50%;
+  min-width: 80px;
+  min-height: 35px;
+  width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  box-sizing: border-box;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.attribute-oval.selected {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.attribute-label-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: center;
+  max-width: 120px;
+  word-wrap: break-word;
+}
+
+.attribute-oval.primary-key .attribute-label-container {
+  text-decoration: underline;
+  font-weight: 700;
+}
+
+.attr-node-actions {
+  position: absolute;
+  top: -25px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  background: var(--panel-bg);
+  padding: 2px 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.attribute-oval:hover .attr-node-actions,
+.attribute-oval.selected .attr-node-actions {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.attr-node-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.attr-node-btn:hover {
+  color: var(--primary-color);
+  background: var(--bg-color);
+}
+
+.attr-node-btn.active {
+  color: var(--primary-color);
+}
+
+.attr-node-btn.delete:hover {
+  color: var(--entity-color);
 }
 
 /* --- Relationship Diamond --- */
@@ -337,9 +328,12 @@ aside.collapsed {
   font-size: 0.75rem;
   color: var(--text-color);
   text-align: center;
-  width: 50px;
+  max-width: 60px;
   word-wrap: break-word;
   line-height: 1.1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Cardinality Controls */
@@ -580,16 +574,16 @@ aside.collapsed {
 input.inline-edit {
   background: transparent;
   border: none;
-  border-bottom: 1px dashed var(--primary-color);
   color: inherit;
   font-family: inherit;
   font-size: inherit;
   font-weight: inherit;
-  width: 100%;
+  width: auto;
+  min-width: 40px;
   outline: none;
   padding: 0;
   margin: 0;
-  text-align: inherit;
+  text-align: center;
 }
 
 .inline-edit-label {
